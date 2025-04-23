@@ -1,4 +1,4 @@
-package main
+package main // can run test and activate pot - should work
 
 import (
 	"database/sql"
@@ -51,6 +51,9 @@ func main() {
 	mux.HandleFunc("POST /admin/reset", apiCfg.handlerReset)
 	mux.HandleFunc("POST /api/chirps", apiCfg.handlerChirpsCreate)
 	mux.HandleFunc("POST /api/users", apiCfg.handlerUsersCreate)
+	mux.HandleFunc("GET /api/chirps", apiCfg.handlerChirpsGet)
+	mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.handlerChirpGet)
+	mux.HandleFunc("POST /api/login", apiCfg.handlerUserLogin)
 
 	srv := &http.Server{
 		Addr:    ":" + port,
