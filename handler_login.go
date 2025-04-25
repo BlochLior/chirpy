@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/BlochLior/chirpy/internal/auth"
+	"github.com/BlochLior/chirpy/internal/database"
 )
 
 func (cfg *apiConfig) handlerUserLogin(w http.ResponseWriter, r *http.Request) {
@@ -40,14 +41,24 @@ func (cfg *apiConfig) handlerUserLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	expirationTime := time.Hour
-	if params.ExpiresInSeconds > 0 && params.ExpiresInSeconds < 3600 {
-		expirationTime = time.Duration(params.ExpiresInSeconds) * time.Second
-	}
-
-	token, err := auth.MakeJWT(user.ID, cfg.jwtSecret, expirationTime)
+	token, err := auth.MakeJWT(user.ID, cfg.jwtSecret)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "failed to generate token", err)
+		return
+	}
+
+	refreshToken, _ := auth.MakeRefreshToken()
+	refreshTokenExpiry := time.Now().Add(time.Hour * 24 * 60)
+	err = cfg.db.CreateRefreshToken(r.Context(), database.CreateRefreshTokenParams{
+		Token:     refreshToken,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		UserID:    user.ID,
+		ExpiresAt: refreshTokenExpiry,
+	})
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "encountered error inserting refresh token to database", err)
+		return
 	}
 
 	respondWithJSON(w, http.StatusOK, response{
@@ -57,6 +68,63 @@ func (cfg *apiConfig) handlerUserLogin(w http.ResponseWriter, r *http.Request) {
 			UpdatedAt: user.UpdatedAt,
 			Email:     user.Email,
 		},
-		Token: token,
+		Token:        token,
+		RefreshToken: refreshToken,
 	})
+}
+
+func (cfg *apiConfig) handlerUpdateLoginInfo(w http.ResponseWriter, r *http.Request) {
+	type parameters struct {
+		NewEmail    string `json:"email"`
+		NewPassword string `json:"password"`
+	}
+	type response struct {
+		User
+	}
+
+	jwtToken, err := extractAuthorizationFromRequest(r)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "no token found in request", err)
+		return
+	}
+
+	userID, err := auth.ValidateJWT(jwtToken, cfg.jwtSecret)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid jwtToken", err)
+		return
+	}
+
+	var params parameters
+	decoder := json.NewDecoder(r.Body)
+	err = decoder.Decode(&params)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "couldn't decode parameters", err)
+		return
+	}
+
+	hashedPassword, err := auth.HashPassword(params.NewPassword)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "couldn't hash new password", err)
+		return
+	}
+
+	updatedUser, err := cfg.db.UpdateUserEmailAndPassword(r.Context(), database.UpdateUserEmailAndPasswordParams{
+		ID:             userID,
+		Email:          params.NewEmail,
+		HashedPassword: hashedPassword,
+	})
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "unable to update user in the database", err)
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, response{
+		User: User{
+			ID:        updatedUser.ID,
+			CreatedAt: updatedUser.CreatedAt,
+			UpdatedAt: updatedUser.UpdatedAt,
+			Email:     updatedUser.Email,
+		},
+	})
+
 }
