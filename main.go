@@ -19,6 +19,7 @@ type apiConfig struct {
 	db             *database.Queries
 	platform       string
 	jwtSecret      string
+	polkaKey       string
 }
 
 func main() {
@@ -35,6 +36,10 @@ func main() {
 	if jwtSecret == "" {
 		log.Fatal("JWT_SECRET must be set")
 	}
+	polkaKey := os.Getenv("POLKA_KEY")
+	if polkaKey == "" {
+		log.Fatal("POLKA_KEY must be set")
+	}
 	dbConn, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		log.Fatalf("encountered error when trying to open database: %s", err)
@@ -48,6 +53,7 @@ func main() {
 		db:             dbQueries,
 		platform:       platform,
 		jwtSecret:      jwtSecret,
+		polkaKey:       polkaKey,
 	}
 	mux := http.NewServeMux()
 	handlerApp := http.StripPrefix("/app", http.FileServer(http.Dir(filepathRoot)))
@@ -59,10 +65,12 @@ func main() {
 	mux.HandleFunc("POST /api/users", apiCfg.handlerUsersCreate)
 	mux.HandleFunc("GET /api/chirps", apiCfg.handlerChirpsGet)
 	mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.handlerChirpGet)
+	mux.HandleFunc("DELETE /api/chirps/{chirpID}", apiCfg.handlerDeleteChirp)
 	mux.HandleFunc("POST /api/login", apiCfg.handlerUserLogin)
-	mux.HandleFunc("POST /api/refresh", apiCfg.handlerCheckRefreshToken)
-	mux.HandleFunc("POST /api/revoke", apiCfg.handlerRevokeRefreshToken)
-	mux.HandleFunc("PUT /api/users", apiCfg.handlerUpdateLoginInfo)
+	mux.HandleFunc("POST /api/refresh", apiCfg.handlerRefresh)
+	mux.HandleFunc("POST /api/revoke", apiCfg.handlerRevoke)
+	mux.HandleFunc("PUT /api/users", apiCfg.handlerUsersUpdate)
+	mux.HandleFunc("POST /api/polka/webhooks", apiCfg.handlerUpgrade)
 
 	srv := &http.Server{
 		Addr:    ":" + port,

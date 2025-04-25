@@ -40,12 +40,13 @@ func CheckPasswordHash(password, hash string) error {
 
 // MakeJWT -
 func MakeJWT(userID uuid.UUID,
-	tokenSecret string) (string, error) {
+	tokenSecret string,
+	expiresIn time.Duration) (string, error) {
 	signingKey := []byte(tokenSecret)
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.RegisteredClaims{
 		Issuer:    string(TokenTypeAccess),
 		IssuedAt:  jwt.NewNumericDate(time.Now().UTC()),
-		ExpiresAt: jwt.NewNumericDate(time.Now().UTC().Add(time.Hour)),
+		ExpiresAt: jwt.NewNumericDate(time.Now().UTC().Add(expiresIn)),
 		Subject:   userID.String(),
 	})
 	return token.SignedString(signingKey)
@@ -94,6 +95,19 @@ func GetBearerToken(headers http.Header) (string, error) {
 		return "", errors.New("malformed authorization header")
 	}
 	return tokenStringSlice[1], nil
+}
+
+// GetAPIKey -
+func GetAPIKey(headers http.Header) (string, error) {
+	authHeader := headers.Get("Authorization")
+	if authHeader == "" {
+		return "", ErrNoAuthHeaderIncluded
+	}
+	apiKeySlice := strings.Split(authHeader, " ")
+	if len(apiKeySlice) < 2 || apiKeySlice[0] != "ApiKey" {
+		return "", errors.New("malformed apikey in authorization header")
+	}
+	return apiKeySlice[1], nil
 }
 
 func MakeRefreshToken() (string, error) {

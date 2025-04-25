@@ -3,6 +3,7 @@ package auth
 import (
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -64,7 +65,7 @@ func TestCheckPasswordHash(t *testing.T) {
 
 func TestValidateJWT(t *testing.T) {
 	userID := uuid.New()
-	validToken, _ := MakeJWT(userID, "secret")
+	validToken, _ := MakeJWT(userID, "secret", time.Hour)
 
 	tests := []struct {
 		name        string
@@ -140,6 +141,7 @@ func TestGetBearerToken(t *testing.T) {
 			wantErr:   true,
 		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			gotToken, err := GetBearerToken(tt.headers)
